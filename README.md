@@ -52,7 +52,7 @@
 
 ## Demo
 
-**Video will be added soon**
+https://github.com/SusheelThapa/C-DOTS/assets/83917129/27d9d23f-6395-427e-8540-d7799dca426f
 
 ## Installation
 
