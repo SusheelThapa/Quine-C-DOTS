@@ -1,4 +1,5 @@
 import sys
+import threading
 from PyQt5.QtWidgets import (
     QApplication,
     QWidget,
@@ -9,15 +10,28 @@ from PyQt5.QtWidgets import (
     QPushButton,
     QSplitter,
     QTextBrowser,
-    QGroupBox,
-    QScrollArea,
     QComboBox,
 )
-from PyQt5.QtCore import QTimer
-from PyQt5.QtGui import QFont
+from PyQt5.QtCore import QTimer, pyqtSignal, QObject
 from PyQt5.QtGui import QFont, QTextCursor
 
 from api import translator
+
+
+class Worker(QObject):
+    finished = pyqtSignal(str)
+
+    def __init__(self, source_language, target_language, code):
+        super().__init__()
+        self.source_language = source_language
+        self.target_language = target_language
+        self.code = code
+
+    def run(self):
+        processed_text = translator(
+            self.code, self.source_language, self.target_language
+        )
+        self.finished.emit(processed_text)
 
 
 class CodeTranslator(QWidget):
@@ -28,7 +42,7 @@ class CodeTranslator(QWidget):
         self.typing_timer = QTimer(self)
         self.typing_timer.timeout.connect(self.type_next_character)
         self.current_typing_position = 0
-        self.processed_text = ""  # Initialize processed_text
+        self.processed_text = "" 
 
     def init_ui(self):
         self.setWindowTitle("Code Translator")
@@ -68,9 +82,11 @@ class CodeTranslator(QWidget):
         self.target_lang_selection = self.create_combobox(
             ["Python", "Java", "C++", "JavaScript", "C"]
         )
-        code_label = self.create_label("Paste or Enter Code Here:")
+        code_label = self.create_label("Code Snippets:")
         self.code_entry = self.create_text_edit()
-        translate_button = self.create_button("Translate Code", self.translate_code)
+        translate_button = self.create_button(
+            "Translate Code", self.generate_translate_code
+        )
 
         left_layout.addWidget(source_lang_label)
         left_layout.addWidget(self.source_lang_selection)
@@ -90,7 +106,6 @@ class CodeTranslator(QWidget):
 
         return right_layout
 
-    # Helper methods to create UI components
     def create_label(self, text):
         label = QLabel(text)
         label.setFont(QFont("Arial", 16))
@@ -142,25 +157,36 @@ class CodeTranslator(QWidget):
         )
         return text_browser
 
-    def translate_code(self):
+    def generate_translate_code(self):
         source_lang = self.source_lang_selection.currentText()
         target_lang = self.target_lang_selection.currentText()
         code = self.code_entry.toPlainText()
-        self.processed_text = translator(code, source_lang, target_lang)
-        self.generated_text_area.clear()  # Clear the text area before starting
+
+        self.generated_text_area.setText(
+            f"Translating Code Snippet from {source_lang} to {target_lang}..."
+        )
+
+        self.worker = Worker(source_lang, target_lang, code)
+        self.thread = threading.Thread(target=self.worker.run)
+        self.worker.finished.connect(self.on_finished)
+        self.thread.start()
+
+    def on_finished(self, processed_text):
+        self.processed_text = processed_text
         self.current_typing_position = 0
-        self.typing_timer.start(20)  # Adjust speed as needed
+        self.typing_timer.start(20)
 
     def type_next_character(self):
         if self.current_typing_position < len(self.processed_text):
+            if self.current_typing_position == 0:
+                self.generated_text_area.clear()
+
             current_text = self.processed_text[self.current_typing_position]
-            self.generated_text_area.moveCursor(
-                QTextCursor.End
-            )  # Move cursor to the end
+            self.generated_text_area.moveCursor(QTextCursor.End)
             self.generated_text_area.insertPlainText(current_text)
             self.current_typing_position += 1
         else:
-            self.typing_timer.stop()  # Stop typing when done
+            self.typing_timer.stop()  
 
 
 def main():
